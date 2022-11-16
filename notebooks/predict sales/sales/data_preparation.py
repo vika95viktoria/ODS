@@ -1,22 +1,13 @@
-import time
 import warnings
 
 warnings.filterwarnings("ignore")
 import numpy as np
 import pandas as pd
-import seaborn as sns
 import datetime
 import re
 import calendar
-import matplotlib.pyplot as plt
-from matplotlib.pyplot import figure
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import roc_auc_score, r2_score, mean_squared_error
-from sklearn.model_selection import train_test_split, GridSearchCV, cross_val_score
-from sklearn.preprocessing import StandardScaler, LabelBinarizer, LabelEncoder
-from xgboost import XGBRegressor
-from sklearn.model_selection import TimeSeriesSplit
 from dateutil.relativedelta import relativedelta
+from itertools import product
 
 
 def get_shop_type(regex, shop_name):
@@ -35,7 +26,7 @@ def get_items(item_categories):
     item_with_categories_dict = items.merge(item_categories, on=['item_category_id'])
     item_with_categories_dict['category'] = item_with_categories_dict['item_category_name'].apply(
         lambda x: x.split(' - ')[0])
-    item_with_categories_dict['item_name_correct'] = items['item_name'].apply(lambda x: x.lower())
+    item_with_categories_dict['item_name_correct'] = item_with_categories_dict['item_name'].apply(lambda x: x.lower())
     item_with_categories_dict['sub_category'] = item_with_categories_dict['item_category_name'].apply(
         lambda x: x.split(' - ')[0] if len(x.split(' - ')) < 2 else x.split(' - ')[1])
     item_with_categories_dict.drop(columns=['item_name', 'item_category_name'])
@@ -123,24 +114,14 @@ def get_date_range(start_year, start_month, end_year, end_month):
     return np.array(result)
 
 
-def generate_all_ids_dataset(start_year, start_month, end_year, end_month, item_ids, shop_ids):
-    all_dates = get_date_range(start_year, start_month, end_year, end_month)
-    res = np.array(np.meshgrid(item_ids, shop_ids, all_dates)).T.reshape(-1, 3)
-    parsed_cols = [[x.year, x.month, x.strftime('%d.%m.%Y')] for x in res[:, 2]]
-    res_arr = np.hstack((res[:, :2], parsed_cols))
-    item_id_dataset = pd.DataFrame(res_arr, columns=['item_id', 'shop_id', 'year', 'month', 'date'])
-    item_id_dataset['month'] = item_id_dataset['month'].astype(np.int64)
-    item_id_dataset['year'] = item_id_dataset['year'].astype(np.int64)
-    return item_id_dataset
-
-# shops = get_shops()
-# item_categories = get_item_categories()
-# items = get_items(item_categories)
-# # # train_df = prepare_full_dataset(pd.read_csv('sales_train.csv.zip'), items, shops, item_categories)
-# # # test_df = prepare_full_dataset(pd.read_csv('test.csv.zip'), items, shops, item_categories, default_date='01.11.2015')
-# shop_ids = shops[~shops.shop_id.isin([0, 1, 10])]['shop_id'].values
-# start = time.time()
-# res = generate_all_ids_dataset(2013, 1, 2015, 10, items['item_id'].values, shop_ids)
-# end = time.time()
-# print(end - start)
-
+def generate_all_ids_dataset(item_ids, shop_ids):
+    matrix = []
+    cols = ['date_block_num', 'shop_id', 'item_id']
+    for i in range(34):
+        matrix.append(np.array(list(product([i], shop_ids, item_ids)), dtype='int16'))
+    matrix = pd.DataFrame(np.vstack(matrix), columns=cols)
+    matrix['date_block_num'] = matrix['date_block_num'].astype(np.int8)
+    matrix['shop_id'] = matrix['shop_id'].astype(np.int8)
+    matrix['item_id'] = matrix['item_id'].astype(np.int16)
+    matrix.sort_values(cols, inplace=True)
+    return matrix
